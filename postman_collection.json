@@ -1,0 +1,113 @@
+{
+	"info": {
+		"name": "Spot Fleet — Fuel-Optimized Route API",
+		"description": "Plan the cheapest fuel stops for a US truck trip (500-mi range, 10 mpg).\n\nStart/finish accept free text or lat,lng.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{"key": "baseUrl", "value": "http://127.0.0.1:8000"}
+	],
+	"item": [
+		{
+			"name": "Route: cross-country (multiple fuel stops)",
+			"request": {
+				"method": "GET",
+				"url": {
+					"raw": "{{baseUrl}}/api/route?start=Cincinnati, OH&finish=Springfield, MO",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "route"],
+					"query": [
+						{"key": "start", "value": "Cincinnati, OH"},
+						{"key": "finish", "value": "Springfield, MO"}
+					]
+				}
+			}
+		},
+		{
+			"name": "Route: long haul (Denver → Chicago)",
+			"request": {
+				"method": "GET",
+				"url": {
+					"raw": "{{baseUrl}}/api/route?start=Denver, CO&finish=Chicago, IL",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "route"],
+					"query": [
+						{"key": "start", "value": "Denver, CO"},
+						{"key": "finish", "value": "Chicago, IL"}
+					]
+				}
+			}
+		},
+		{
+			"name": "Route: explicit coordinates",
+			"request": {
+				"method": "GET",
+				"url": {
+					"raw": "{{baseUrl}}/api/route?start=39.1031,-84.5120&finish=37.2090,-93.2923",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "route"],
+					"query": [
+						{"key": "start", "value": "39.1031,-84.5120"},
+						{"key": "finish", "value": "37.2090,-93.2923"}
+					]
+				}
+			}
+		},
+		{
+			"name": "Route: short trip (no fuel stops expected)",
+			"request": {
+				"method": "GET",
+				"url": {
+					"raw": "{{baseUrl}}/api/route?start=Dallas, TX&finish=Austin, TX",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "route"],
+					"query": [
+						{"key": "start", "value": "Dallas, TX"},
+						{"key": "finish", "value": "Austin, TX"}
+					]
+				}
+			}
+		},
+		{
+			"name": "Route: error case (bad location)",
+			"request": {
+				"method": "GET",
+				"url": {
+					"raw": "{{baseUrl}}/api/route?start=Atlantis&finish=Dallas, TX",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "route"],
+					"query": [
+						{"key": "start", "value": "Atlantis"},
+						{"key": "finish", "value": "Dallas, TX"}
+					]
+				}
+			}
+		},
+		{
+			"name": "Map page (open in browser)",
+			"request": {
+				"method": "GET",
+				"url": {
+					"raw": "{{baseUrl}}/api/route/map?start=Cincinnati, OH&finish=Springfield, MO",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "route", "map"],
+					"query": [
+						{"key": "start", "value": "Cincinnati, OH"},
+						{"key": "finish", "value": "Springfield, MO"}
+					]
+				}
+			}
+		},
+		{
+			"name": "Health",
+			"request": {
+				"method": "GET",
+				"url": {
+					"raw": "{{baseUrl}}/api/health",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "health"]
+				}
+			}
+		}
+	]
+}
