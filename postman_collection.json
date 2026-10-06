@@ -69,15 +69,30 @@
 			}
 		},
 		{
-			"name": "Route: error case (bad location)",
+			"name": "Route: multi-stop long haul (West Palm Beach → Dallas)",
 			"request": {
 				"method": "GET",
 				"url": {
-					"raw": "{{baseUrl}}/api/route?start=Atlantis&finish=Dallas, TX",
+					"raw": "{{baseUrl}}/api/route?start=Atlantis, FL&finish=Dallas, TX",
 					"host": ["{{baseUrl}}"],
 					"path": ["api", "route"],
 					"query": [
-						{"key": "start", "value": "Atlantis"},
+						{"key": "start", "value": "Atlantis, FL"},
+						{"key": "finish", "value": "Dallas, TX"}
+					]
+				}
+			}
+		},
+		{
+			"name": "Route: error case (unknown location, 404)",
+			"request": {
+				"method": "GET",
+				"url": {
+					"raw": "{{baseUrl}}/api/route?start=Xyzzyville&finish=Dallas, TX",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "route"],
+					"query": [
+						{"key": "start", "value": "Xyzzyville"},
 						{"key": "finish", "value": "Dallas, TX"}
 					]
 				}
