@@ -33,8 +33,17 @@ class Command(BaseCommand):
                             help='Stop after this many lookups (for testing).')
         parser.add_argument('--no-export', action='store_true',
                             help='Skip writing the JSON snapshot at the end.')
+        parser.add_argument('--retry-failed', action='store_true',
+                            help='Reset previously failed stations to pending '
+                                 'and try them again (e.g. after a rate-limit '
+                                 'induced failure spike).')
 
     def handle(self, *args, **opts):
+        if opts['retry_failed']:
+            reset = FuelStation.objects.filter(
+                geo_status=FuelStation.GeoStatus.FAILED).update(
+                geo_status=FuelStation.GeoStatus.PENDING)
+            self.stdout.write(f'Reset {reset} failed stations to pending.')
         ids = list(FuelStation.objects.filter(
             geo_status=FuelStation.GeoStatus.PENDING).values_list('id', flat=True))
         total = len(ids)
