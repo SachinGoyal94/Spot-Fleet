@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Route error</title>
+  <style>
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f172a; color: #e2e8f0;
+           display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+    .card { background: #1e293b; padding: 32px 40px; border-radius: 12px; max-width: 480px; }
+    h1 { font-size: 18px; color: #fbbf24; margin-top: 0; }
+    p { color: #94a3b8; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Could not build the route</h1>
+    <p>{{ message }}</p>
+    <p>Try a US city/state like <em>?start=Cincinnati, OH&amp;finish=Springfield, MO</em>,
+       or explicit coordinates like <em>?start=39.1031,-84.5120&amp;finish=37.2090,-93.2923</em>.</p>
+  </div>
+</body>
+</html>

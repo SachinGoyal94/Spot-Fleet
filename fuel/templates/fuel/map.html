@@ -1,0 +1,121 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ start_label }} &rarr; {{ finish_label }} &middot; Fuel-Optimized Route</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    :root {
+      --bg: #0f172a; --panel: #1e293b; --ink: #e2e8f0; --muted: #94a3b8;
+      --accent: #38bdf8; --green: #34d399; --amber: #fbbf24;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--ink); }
+    header { padding: 20px 28px 12px; }
+    header h1 { margin: 0 0 4px; font-size: 22px; font-weight: 600; }
+    header h1 .arrow { color: var(--accent); }
+    header p { margin: 0; color: var(--muted); font-size: 13px; }
+    .stats { display: flex; flex-wrap: wrap; gap: 12px; padding: 12px 28px; }
+    .stat { background: var(--panel); border-radius: 10px; padding: 12px 18px; min-width: 150px; }
+    .stat .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+    .stat .value { font-size: 22px; font-weight: 700; margin-top: 2px; }
+    .stat .value.cost { color: var(--amber); }
+    .stat .value.dist { color: var(--accent); }
+    #map { height: 62vh; margin: 8px 28px; border-radius: 12px; border: 1px solid #334155; }
+    .section { padding: 10px 28px 32px; }
+    .section h2 { font-size: 15px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+    table { width: 100%; border-collapse: collapse; background: var(--panel); border-radius: 10px; overflow: hidden; }
+    th, td { text-align: left; padding: 10px 14px; font-size: 14px; }
+    th { background: #273449; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+    tr:nth-child(even) td { background: #22304a; }
+    .badge { display: inline-block; background: var(--accent); color: #0f172a; font-weight: 700;
+             border-radius: 50%; width: 24px; height: 24px; line-height: 24px; text-align: center; font-size: 12px; }
+    .price { color: var(--amber); font-weight: 600; }
+    .footnote { color: var(--muted); font-size: 12px; padding: 0 28px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>{{ start_label }} <span class="arrow">&rarr;</span> {{ finish_label }}</h1>
+    <p>Fuel-optimized route &middot; max range 500 mi &middot; 10 mpg &middot; departs with a full (already paid for) tank</p>
+  </header>
+
+  <div class="stats">
+    <div class="stat"><div class="label">Distance</div><div class="value dist">{{ total_distance_miles }} mi</div></div>
+    <div class="stat"><div class="label">Drive time</div><div class="value">~{{ estimated_drive_hours }} h</div></div>
+    <div class="stat"><div class="label">Total fuel cost</div><div class="value cost">${{ total_fuel_cost_usd }}</div></div>
+    <div class="stat"><div class="label">Gallons purchased</div><div class="value">{{ total_gallons }}</div></div>
+    <div class="stat"><div class="label">Fuel stops</div><div class="value">{{ stops|length }}</div></div>
+  </div>
+
+  <div id="map"></div>
+
+  <div class="section">
+    <h2>Recommended fuel stops</h2>
+    {% if stops %}
+    <table>
+      <thead>
+        <tr><th>#</th><th>Truckstop</th><th>Location</th><th>Price / gal</th>
+            <th>Gallons</th><th>Cost</th><th>Mile of route</th></tr>
+      </thead>
+      <tbody>
+        {% for s in stops %}
+        <tr>
+          <td><span class="badge">{{ s.order }}</span></td>
+          <td>{{ s.name }}</td>
+          <td>{{ s.city }}, {{ s.state }}</td>
+          <td class="price">${{ s.price_per_gallon }}</td>
+          <td>{{ s.gallons }}</td>
+          <td>${{ s.cost_usd }}</td>
+          <td>{{ s.miles_from_start }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p>The destination is within range on a single tank &mdash; no fuel purchases needed.</p>
+    {% endif %}
+  </div>
+  <p class="footnote">Map data &copy; OpenStreetMap contributors &middot; Routing by OSRM &middot; Fuel prices from the provided OPIS truckstop list</p>
+
+  {{ geojson|json_script:"route-geojson" }}
+  {{ stops|json_script:"fuel-stops" }}
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const geojson = JSON.parse(document.getElementById('route-geojson').textContent);
+    const stops = JSON.parse(document.getElementById('fuel-stops').textContent);
+    const coords = geojson.coordinates.map(c => [c[1], c[0]]);
+
+    const map = L.map('map').fitBounds(coords, { padding: [30, 30] });
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+    }).addTo(map);
+
+    L.polyline(coords, { color: '#38bdf8', weight: 5, opacity: 0.9 }).addTo(map);
+
+    L.marker(coords[0]).addTo(map).bindPopup('<b>Start</b>');
+    L.marker(coords[coords.length - 1]).addTo(map).bindPopup('<b>Finish</b>');
+
+    stops.forEach(s => {
+      const icon = L.divIcon({
+        className: '',
+        html: '<div style="background:#fbbf24;color:#0f172a;font:700 12px/24px sans-serif;'
+            + 'width:24px;height:24px;border-radius:50%;text-align:center;'
+            + 'border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)">' + s.order + '</div>',
+        iconSize: [24, 24], iconAnchor: [12, 12]
+      });
+      L.marker([s.lat, s.lng], { icon }).addTo(map).bindPopup(
+        '<b>#' + s.order + ' ' + s.name + '</b><br>' +
+        s.city + ', ' + s.state + '<br>' +
+        'Price: $' + s.price_per_gallon + '/gal<br>' +
+        'Buy: ' + s.gallons + ' gal for $' + s.cost_usd + '<br>' +
+        'Mile ' + s.miles_from_start + ' of the route'
+      );
+    });
+  </script>
+</body>
+</html>
