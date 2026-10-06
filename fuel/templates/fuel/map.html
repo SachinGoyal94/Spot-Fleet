@@ -90,9 +90,9 @@
     const coords = geojson.coordinates.map(c => [c[1], c[0]]);
 
     const map = L.map('map').fitBounds(coords, { padding: [30, 30] });
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
 
     L.polyline(coords, { color: '#38bdf8', weight: 5, opacity: 0.9 }).addTo(map);

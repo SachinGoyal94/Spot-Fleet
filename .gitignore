@@ -3,3 +3,4 @@ __pycache__/
 *.pyc
 db.sqlite3
 fuel-prices-for-be-assessment.csv
+runserver.log
