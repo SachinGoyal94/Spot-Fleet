@@ -108,9 +108,13 @@
             + 'border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)">' + s.order + '</div>',
         iconSize: [24, 24], iconAnchor: [12, 12]
       });
+      // Station names come from the price list, i.e. outside data: escape
+      // everything before it goes into a popup.
+      const esc = t => String(t).replace(/[&<>"']/g,
+        c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
       L.marker([s.lat, s.lng], { icon }).addTo(map).bindPopup(
-        '<b>#' + s.order + ' ' + s.name + '</b><br>' +
-        s.city + ', ' + s.state + '<br>' +
+        '<b>#' + s.order + ' ' + esc(s.name) + '</b><br>' +
+        esc(s.city) + ', ' + esc(s.state) + '<br>' +
         'Price: $' + s.price_per_gallon + '/gal<br>' +
         'Buy: ' + s.gallons + ' gal for $' + s.cost_usd + '<br>' +
         'Mile ' + s.miles_from_start + ' of the route'

@@ -14,9 +14,13 @@ class GeoHelperTests(TestCase):
     def test_parse_latlng(self):
         self.assertEqual(parse_latlng('41.8781,-87.6298'), (41.8781, -87.6298))
         self.assertEqual(parse_latlng(' 39.5 ; -94.5 '), (39.5, -94.5))
+        # Alaska and Hawaii are USA too.
+        self.assertEqual(parse_latlng('61.2181,-149.9003'), (61.2181, -149.9003))
+        self.assertEqual(parse_latlng('21.3069,-157.8583'), (21.3069, -157.8583))
         self.assertIsNone(parse_latlng('Chicago, IL'))
         self.assertIsNone(parse_latlng('91.0, 0.0'))   # out of US bounds
         self.assertIsNone(parse_latlng('41.0, 45.0'))  # out of US bounds
+        self.assertIsNone(parse_latlng('51.5, -0.12')) # London is not in the US
 
     def test_in_us_bounds(self):
         self.assertTrue(in_us_bounds(39.0, -95.0))

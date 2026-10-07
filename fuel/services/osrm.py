@@ -1,8 +1,13 @@
 """Routing via the OSRM public demo server (free, no API key).
 
 Exactly one HTTP call per route request; identical trips are served from the
-RouteCache table.
+RouteCache table. The demo server is best effort, so a transient failure is
+retried once before the caller sees an error.
 """
+
+import time
+
+import requests
 
 from django.conf import settings
 
@@ -32,7 +37,18 @@ def get_route(lat1, lng1, lat2, lng2):
     path = f"{lng1:.5f},{lat1:.5f};{lng2:.5f},{lat2:.5f}"
     url = f'{settings.OSRM_BASE_URL}/route/v1/driving/{path}'
     params = {'overview': 'simplified', 'geometries': 'geojson', 'alternatives': 'false'}
-    data = get_json(url, params=params)
+
+    data = None
+    for attempt in range(2):
+        try:
+            data = get_json(url, params=params)
+            break
+        except (requests.RequestException, ValueError) as exc:
+            if attempt == 0:
+                time.sleep(0.6)
+            else:
+                raise RoutingError(f'Routing service unreachable: {exc}') from exc
+
     if data.get('code') != 'Ok' or not data.get('routes'):
         raise RoutingError(f'OSRM could not route between the given points '
                            f'(code: {data.get("code")})')

@@ -44,6 +44,9 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
+        # runserver is threaded; let concurrent cache writes wait on each
+        # other instead of failing with "database is locked".
+        'OPTIONS': {'timeout': 20},
     }
 }
 
@@ -61,7 +64,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Everything below is free / open data. No API keys are required:
 #   * Routing    -> OSRM public demo server (OpenStreetMap data)
 #   * Geocoding  -> Photon (komoot) with Nominatim as fallback
-#   * Map tiles  -> CARTO basemaps rendered on Leaflet (OpenStreetMap data)
+#   * Map tiles  -> OpenStreetMap tiles rendered on Leaflet
 # ---------------------------------------------------------------------------
 
 # Vehicle model

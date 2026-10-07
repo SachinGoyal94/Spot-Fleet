@@ -1,3 +1,5 @@
+from urllib.parse import urlencode
+
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
@@ -34,9 +36,8 @@ def route_api(request):
     except InfeasibleRoute as exc:
         return _error(str(exc), 422)
 
-    trip['map_url'] = request.build_absolute_uri(
-        f"{reverse('route-map')}?start={start_q}&finish={finish_q}"
-    )
+    query = urlencode({'start': start_q, 'finish': finish_q})
+    trip['map_url'] = request.build_absolute_uri(f"{reverse('route-map')}?{query}")
     return JsonResponse(trip)
 
 
@@ -52,7 +53,9 @@ def route_map(request):
         trip = build_trip(start_q, finish_q)
     except GeocodeError as exc:
         return render(request, 'fuel/map_error.html', {'message': str(exc)}, status=404)
-    except (osrm.RoutingError, InfeasibleRoute) as exc:
+    except InfeasibleRoute as exc:
+        return render(request, 'fuel/map_error.html', {'message': str(exc)}, status=422)
+    except osrm.RoutingError as exc:
         return render(request, 'fuel/map_error.html', {'message': str(exc)}, status=502)
 
     context = {

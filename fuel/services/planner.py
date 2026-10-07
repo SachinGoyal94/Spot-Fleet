@@ -154,6 +154,7 @@ def plan_fuel_stops(total_distance_miles, corridor, mpg=None, range_miles=None):
 
     miles = [s['miles_along'] for s in corridor]
     pos = 0.0
+    last_purchase = 0.0  # the truck starts full at mile 0
     # Depart with a full tank already paid for.
     range_left = float(range_miles)
     purchases = []
@@ -200,13 +201,13 @@ def plan_fuel_stops(total_distance_miles, corridor, mpg=None, range_miles=None):
             purchases.append({
                 'station': best,
                 'miles_from_start': best['miles_along'],
-                'miles_since_previous': best['miles_along'] - pos
-                if not purchases else best['miles_along'] - purchases[-1]['miles_from_start'],
+                'miles_since_previous': best['miles_along'] - last_purchase,
                 'gallons': gallons,
                 'cost_usd': cost,
             })
             total_cost += cost
             total_gallons += gallons
+            last_purchase = best['miles_along']
 
         pos = best['miles_along']
         range_left = range_at_best + needed

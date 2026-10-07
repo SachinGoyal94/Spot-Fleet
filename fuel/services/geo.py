@@ -48,9 +48,9 @@ STATE_NAMES = {
     'DC': 'District of Columbia',
 }
 
-# Rough bounding box of the contiguous US (+ margin). Anything outside is a
-# geocoder mismatch.
-US_BOUNDS = {'lat_min': 24.0, 'lat_max': 50.5, 'lng_min': -125.5, 'lng_max': -66.5}
+# Rough bounding box of the US including Alaska and Hawaii. Anything outside
+# is a geocoder mismatch.
+US_BOUNDS = {'lat_min': 18.0, 'lat_max': 72.0, 'lng_min': -180.0, 'lng_max': -66.5}
 
 _LATLNG_RE = re.compile(r'^\s*(-?\d{1,2}(?:\.\d+)?)\s*[,; ]\s*(-?\d{1,3}(?:\.\d+)?)\s*$')
 

@@ -6,6 +6,8 @@ from unittest.mock import patch
 from django.test import TestCase
 
 from fuel.models import FuelStation
+from fuel.services import osrm
+from fuel.services.planner import InfeasibleRoute
 from fuel.services.trip import StationRepo, build_trip
 
 # A due-north route along longitude -95, 101 points from lat 39.0 to 46.27
@@ -103,6 +105,27 @@ class ViewTests(TestCase):
     def test_route_api_requires_params(self):
         resp = self.client.get('/api/route')
         self.assertEqual(resp.status_code, 400)
+
+    @patch('fuel.views.build_trip')
+    def test_map_url_is_url_encoded(self, mock_trip):
+        mock_trip.return_value = dict(self.CANNED_TRIP)
+        resp = self.client.get('/api/route?start=A %26 B, TX&finish=C, TX')
+        self.assertEqual(resp.status_code, 200)
+        map_url = resp.json()['map_url']
+        self.assertIn('start=A+%26+B%2C+TX', map_url)
+        self.assertIn('finish=C%2C+TX', map_url)
+
+    @patch('fuel.views.build_trip')
+    def test_map_page_returns_422_for_infeasible_route(self, mock_trip):
+        mock_trip.side_effect = InfeasibleRoute(500.0)
+        resp = self.client.get('/api/route/map?start=A&finish=B')
+        self.assertEqual(resp.status_code, 422)
+
+    @patch('fuel.views.build_trip')
+    def test_map_page_returns_502_for_routing_failure(self, mock_trip):
+        mock_trip.side_effect = osrm.RoutingError('demo server down')
+        resp = self.client.get('/api/route/map?start=A&finish=B')
+        self.assertEqual(resp.status_code, 502)
 
     @patch('fuel.views.build_trip')
     def test_map_page_renders(self, mock_trip):

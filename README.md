@@ -155,7 +155,7 @@ fuel/
     load_stations.py  price list to DB, dedupes by OPIS ID
     geocode_stations.py  one-time geocoding seed, writes the snapshot
   templates/fuel/     map page
-  tests/              21 tests, external services mocked
+  tests/              24 tests, external services mocked
 data/
   stations_geocoded.json   seeded coordinates snapshot
 ```
@@ -183,3 +183,21 @@ runs offline.
   towns are small) and are flagged `approx` in the snapshot.
 - OSRM's demo server is rate limited and best effort. For anything real you
   would self-host it with Docker behind the same client in `osrm.py`.
+
+## What I would do next
+
+- Model a real truck more closely: diesel prices already are in the data, but
+  mpg drops with gross weight, and DOT hours-of-service breaks change where a
+  stop makes sense. The planner interface would stay the same, only the
+  numbers move.
+- Live prices. The provided file is a snapshot; OPIS publishes daily, so the
+  FuelStation rows could be refreshed by a scheduled import and the plan
+  would follow.
+- Sharper station coordinates. The snapshot geocodes the provided addresses
+  against free OSM geocoders; a commercial POI dataset (or a self-hosted
+  Nominatim) would remove most of the approximate matches.
+- If the endpoint list grew, a POST variant with a JSON body plus an OpenAPI
+  schema would be the natural next step.
+- The corridor filter is a numpy pass over all stations per request (a few
+  ms at 6.7k stations). With a much larger list I would put the stations in
+  an R-tree or a spatial index first.
