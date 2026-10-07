@@ -1,6 +1,6 @@
 {
 	"info": {
-		"name": "Spot Fleet — Fuel-Optimized Route API",
+		"name": "Spot Fleet Fuel Route API",
 		"description": "Plan the cheapest fuel stops for a US truck trip (500-mi range, 10 mpg).\n\nStart/finish accept free text or lat,lng.",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},

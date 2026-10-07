@@ -1,46 +1,53 @@
-# Spot Fleet — Fuel-Optimized Route API
+# Spot Fleet: Fuel-Optimized Route API
 
-A Django REST-style API that plans the cheapest fueling strategy for a truck
-trip between two US locations.
+Django API that plans the cheapest way to fuel a truck trip between two US
+locations. You give it a start and a finish (free text like "Cincinnati, OH"
+or explicit lat,lng) and it returns:
 
-Give it a start and a finish (free text or `lat,lng`) and it returns:
+- the route as GeoJSON, ready to draw on a map,
+- the fuel stops to buy at, with price, gallons and cost per stop,
+- the total money spent on fuel,
+- and a map page with the route and the stops drawn on it.
 
-- the **route** as GeoJSON (drawable directly on a map),
-- the **optimal fuel stops** along the route with per-stop gallons & cost,
-- the **total money spent on fuel** (10 mpg, 500-mile max range),
-- and an **interactive map page** with the route and numbered fuel-stop pins.
+The truck does 10 mpg with a 500 mile range on a full tank. Everything the
+API calls is free and needs no keys: OSRM (public demo server) for routing,
+Photon and Nominatim for geocoding, and plain OpenStreetMap tiles for the
+map. There is no signup or credential anywhere in the project.
 
-Every external service is free and key-less — no API keys, no signup:
+## Running it
 
-| Concern | Service |
-| --- | --- |
-| Driving route | [OSRM](https://project-osrm.org/) public demo server (OpenStreetMap data) |
-| Geocoding | [Photon](https://photon.komoot.io/) by komoot, [Nominatim](https://nominatim.openstreetmap.org/) as fallback |
-| Map tiles | CARTO raster tiles on Leaflet (OpenStreetMap data) |
+The repo ships a ready `.venv` (Python 3.13). On Windows:
 
-## Quick start
-
-```bash
-# Windows (repo ships a ready .venv; recreate with `python -m venv .venv` if needed)
+```
 .venv\Scripts\activate
 pip install -r requirements.txt
-
 python manage.py migrate
-python manage.py load_stations --from-json data/stations_geocoded.json   # instant
-#   ...or from the raw CSV (geocodes 6,7k truckstops once, ~45 min):
-#   python manage.py load_stations && python manage.py geocode_stations
-
+python manage.py load_stations --from-json data/stations_geocoded.json
 python manage.py runserver
 ```
+
+`load_stations --from-json` loads the 6,627 geocoded truckstops from the
+committed snapshot and takes a few seconds. If you want to rebuild that
+snapshot from the raw OPIS price list instead (the CSV is not committed,
+drop it in the repo root first), run:
+
+```
+python manage.py load_stations
+python manage.py geocode_stations
+```
+
+The second command geocodes the whole list, which takes about an hour, so it
+is a one-time seeding step and normally nobody needs to run it.
 
 Then open:
 
 - `http://127.0.0.1:8000/api/route?start=Cincinnati, OH&finish=Springfield, MO`
 - `http://127.0.0.1:8000/api/route/map?start=Cincinnati, OH&finish=Springfield, MO`
 
-A ready-made Postman collection is in [`postman_collection.json`](postman_collection.json).
+There is also a Postman collection in `postman_collection.json` with a few
+requests I used for testing.
 
-## API
+## The API
 
 ### `GET /api/route?start=<place>&finish=<place>`
 
@@ -49,78 +56,87 @@ A ready-made Postman collection is in [`postman_collection.json`](postman_collec
   "start": {"query": "Cincinnati, OH", "lat": 39.103, "lng": -84.512, "label": "Cincinnati"},
   "finish": {"query": "Springfield, MO", "lat": 37.209, "lng": -93.292, "label": "Springfield"},
   "vehicle": {"range_miles": 500, "mpg": 10, "start_tank": "full (already paid for)"},
-  "total_distance_miles": 611.4,
-  "estimated_drive_hours": 9.0,
-  "total_gallons_purchased": 11.1,
-  "total_fuel_cost_usd": 34.02,
+  "total_distance_miles": 563.9,
+  "estimated_drive_hours": 10.6,
+  "total_gallons_purchased": 6.39,
+  "total_fuel_cost_usd": 18.98,
   "fuel_stops": [
     {
-      "order": 1, "opis_id": 2745, "name": "SAPP BROS. PETROL", "address": "I-70, EXIT 166...",
-      "city": "Boonville", "state": "MO", "price_per_gallon": 2.96,
-      "gallons": 11.1, "cost_usd": 32.86, "lat": 38.95, "lng": -92.75,
-      "miles_from_start": 455.2, "miles_since_previous": 455.2
+      "order": 1, "opis_id": 6683, "name": "STUCKEYS TRAVEL PLAZA", "address": "I-44, EXIT ...",
+      "city": "Lebanon", "state": "MO", "price_per_gallon": 2.9723,
+      "gallons": 6.32, "cost_usd": 18.78, "lat": 37.68, "lng": -92.66,
+      "miles_from_start": 462.0, "miles_since_previous": 462.0
     }
   ],
-  "route_geojson": {"type": "LineString", "coordinates": [[-84.51, 39.1], ...]},
+  "route_geojson": {"type": "LineString", "coordinates": [[-84.51, 39.1], "..."]},
   "map_url": "http://127.0.0.1:8000/api/route/map?start=Cincinnati, OH&finish=Springfield, MO"
 }
 ```
 
-`start`/`finish` accept free text ("Cincinnati, OH", a ZIP) or explicit
-`lat,lng`. Status codes: `200` ok · `400` missing params · `404` location not
-resolvable · `422` route infeasible (a >500 mi gap between truckstops) ·
-`502` routing service error.
+`start` and `finish` take free text (city, ZIP code) or `lat,lng`. Error
+cases return JSON with a matching status: `400` for missing parameters, `404`
+when a place cannot be resolved, `422` when the route is not drivable within
+the range (a gap between truckstops longer than 500 miles), and `502` when
+the routing service fails.
 
-Other endpoints: `GET /api/route/map` (HTML map) · `GET /api/health` · `GET /`.
+Other endpoints: `GET /api/route/map` renders the same trip as an HTML map
+page, `GET /api/health` reports station counts, and `GET /` lists the
+endpoints.
 
 ## How it works
 
 ```
 GET /api/route?start=...&finish=...
-   │
-   ├─ geocode start/finish        Photon → Nominatim, cached in DB
-   ├─ ONE call to OSRM            route geometry + distance (cached per pair)
-   ├─ corridor filter             project the 6,7k truckstops onto the route
-   │                              polyline (numpy), keep those ≤ 4 mi away
-   ├─ fuel optimizer              greedy "gas station problem" plan
-   └─ respond                     JSON (or render the Leaflet map page)
+   |
+   |-- resolve start and finish     Photon, then Nominatim, cached in the DB
+   |-- route                        ONE call to OSRM, cached per coordinate pair
+   |-- corridor filter              project truckstops onto the route, keep
+   |                                those within 4 miles of it
+   |-- fuel plan                    greedy cheapest-fuel strategy
+   |-- respond                      JSON (or render the map page)
 ```
 
-### The fuel optimizer
+### Corridor filter
 
-Assumptions (all configurable in `spotfleet/settings.py`): 500-mile max range
-on a full tank, 10 mpg, the truck departs with a **full, already-paid-for**
-tank, prices are the provided retail snapshot, and only truckstops within
-`CORRIDOR_BUFFER_MILES` (4 mi) of the route are considered.
+Truckstops that are nowhere near the route should not be candidates. The
+route polyline from OSRM gets every station with known coordinates projected
+onto it (point to segment distance, vectorized with numpy), and only stations
+within `CORRIDOR_BUFFER_MILES` (4 miles) of the polyline survive. Each
+survivor keeps its "miles along route" value, which is what the planner
+works with. On a cross-country route this takes a few milliseconds.
 
-The planner is the classic capacity-constrained gas-station greedy:
+### Fuel plan
 
-1. While the destination is out of reach, look at every truckstop reachable
-   with the remaining fuel (strictly ahead on the route).
-2. Buy at the **cheapest** reachable one (ties: the farthest).
-3. There, buy just enough to reach the **next equally-cheap or cheaper**
-   stop within a full tank's distance; if the trip can finish on one tank,
-   buy exactly that amount; otherwise fill the tank completely (an expensive
-   stretch lies ahead, so maximize cheap fuel carried).
+The planner solves the capacity-constrained gas station problem with the
+standard greedy:
 
-This never buys expensive fuel unless forced, never overbuys it, and tops up
-at bargains. Gallons × price per stop are summed into `total_fuel_cost_usd`.
+1. While the destination is out of reach, look at every truckstop within
+   reach (strictly ahead on the route).
+2. Buy at the cheapest reachable one. On a tie, take the farthest.
+3. At that stop, buy just enough fuel to reach the next stop that is equally
+   cheap or cheaper, if one fits within a full tank from there. If the trip
+   can finish on one tank, buy exactly that amount. Otherwise fill the tank,
+   because an expensive stretch lies ahead and it pays to carry the cheap
+   fuel as far as possible.
+
+The truck leaves with a full tank that is already paid for, so the first
+500 miles are free and the reported cost only counts fuel bought on the way.
+Cost per stop is gallons times the retail price from the provided list.
 
 ### Speed
 
-Per request: 1 geocoder lookup per uncached endpoint + **exactly one OSRM
-call**; everything else is local (numpy projection is a few ms). Start/finish
-geocodes and OSRM routes are persisted in caches (`GeoCache`, `RouteCache`),
-so repeat and similar trips answer from SQLite. A fresh cross-country query
-takes ~1–2 s end-to-end; cached ones answer in tens of milliseconds.
+One trip needs one OSRM call and one geocoder lookup per uncached endpoint.
+Start/finish geocodes are stored in the `GeoCache` table and OSRM responses
+in `RouteCache`, so repeating or re-running a trip answers from SQLite. A
+fresh cross-country trip takes around 1 to 2 seconds end to end, repeats
+answer in 25 to 70 ms.
 
-### Why no API keys
-
-OSRM's demo server, Photon, Nominatim and CARTO's public tiles all serve
-anonymous traffic under fair-use policies. The heavy part — geocoding 6,738
-truckstop addresses — is done **once** during seeding and committed as
-`data/stations_geocoded.json`, so neither the API nor a fresh clone ever
-needs it again.
+The 6,738 truckstop addresses were geocoded once during seeding (about an
+hour against the free geocoders, politely rate limited) and the result is
+committed as `data/stations_geocoded.json`, so neither the API nor a fresh
+clone ever needs to geocode the list again. 6,627 of 6,738 resolved; the
+remaining 111 had addresses the geocoders could not match, and they are
+simply not candidates.
 
 ## Project layout
 
@@ -130,35 +146,40 @@ fuel/
   models.py           FuelStation, GeoCache, RouteCache
   views.py            /api/route, /api/route/map, /api/health
   services/
-    geo.py            Photon→Nominatim geocoding chain + caches
-    osrm.py           OSRM client (1 call/request) + route cache
-    planner.py        corridor projection (numpy) + fuel optimizer
+    geo.py            Photon and Nominatim geocoding chain
+    osrm.py           OSRM client and route cache
+    planner.py        corridor projection (numpy) and fuel planner
     trip.py           orchestration shared by JSON and map views
-    http.py           session, UA header, rate limiter
+    http.py           session, user agent, rate limiter
   management/commands/
-    load_stations.py  CSV → DB (dedupes by OPIS ID)
-    geocode_stations.py  one-time concurrent geocoding seed + snapshot
-  templates/fuel/     Leaflet map page
-  tests/              21 unit tests (no network needed)
+    load_stations.py  price list to DB, dedupes by OPIS ID
+    geocode_stations.py  one-time geocoding seed, writes the snapshot
+  templates/fuel/     map page
+  tests/              21 tests, external services mocked
 data/
   stations_geocoded.json   seeded coordinates snapshot
 ```
 
-## Testing
+## Tests
 
-```bash
+```
 python manage.py test fuel.tests
 ```
 
-Covers the optimizer (cost-optimal plans on synthetic routes), the corridor
-projection math, the geocoding helpers, the CSV loader (dedup) and the API
-views (external services mocked).
+The suite covers the fuel planner on hand-checked synthetic routes, the
+corridor projection math, the geocoding helpers, the price list loader
+(duplicate rows), and the API views. External services are mocked, so it
+runs offline.
 
-## Assumptions & notes
+## Assumptions
 
-- Both endpoints must be in the USA (geocoders are restricted to US results).
-- Fuel purchased before departure (starting tank) is not part of the trip cost.
-- Truckstop coordinates come from OSM geocoding of the provided addresses;
-  city-centroid fallbacks are flagged `approx` in the data snapshot.
-- OSRM's demo server is rate-limited and best-effort; for production you'd
-  self-host it (Docker) behind the same client.
+- Both endpoints are in the USA; the geocoders are restricted to US results.
+- The starting tank is full and already paid for, so a trip under 500 miles
+  costs nothing in fuel.
+- Prices are the retail snapshot from the provided file and never change
+  mid-trip.
+- Truckstop coordinates come from geocoding the provided addresses. Stops
+  that only matched their city centroid are still usable (most truckstop
+  towns are small) and are flagged `approx` in the snapshot.
+- OSRM's demo server is rate limited and best effort. For anything real you
+  would self-host it with Docker behind the same client in `osrm.py`.
