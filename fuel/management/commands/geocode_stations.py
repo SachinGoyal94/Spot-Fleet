@@ -117,6 +117,8 @@ class Command(BaseCommand):
         rows = list(FuelStation.objects.exclude(lat__isnull=True).values(
             'opis_id', 'name', 'address', 'city', 'state', 'rack_id',
             'retail_price', 'lat', 'lng', 'geo_status', 'geo_source'))
+        for row in rows:
+            row['retail_price'] = float(row['retail_price'])
         path = settings.GEOCODED_SNAPSHOT_PATH
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, 'w', encoding='utf-8') as fh:
