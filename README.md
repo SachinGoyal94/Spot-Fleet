@@ -1,5 +1,7 @@
 # Spot Fleet: Fuel-Optimized Route API
 
+> **Demo video:** https://www.tella.tv/video/fuel-optimized-routing-api-submission-1u71
+
 Django API that plans the cheapest way to fuel a truck trip between two US
 locations. You give it a start and a finish (free text like "Cincinnati, OH"
 or explicit lat,lng) and it returns:
