@@ -74,6 +74,14 @@ VEHICLE_MPG = 10            # fuel economy
 # Truckstops within this distance of the route polyline are considered.
 CORRIDOR_BUFFER_MILES = 4.0
 
+# The full OSRM polyline is thinned to roughly this spacing before it is used
+# for corridor matching and drawing. Half a mile keeps the line on the road
+# while keeping payloads and projection cost small.
+ROUTE_MIN_SPACING_MILES = 0.5
+
+# Cheap first-pass screening radius (miles) before exact projection.
+CORRIDOR_SCREEN_MILES = 20.0
+
 # Assumption: the truck departs with a full (already paid for) tank, so fuel
 # purchased before departure is not part of the trip cost.
 START_WITH_FULL_TANK = True

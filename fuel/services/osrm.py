@@ -13,6 +13,7 @@ from django.conf import settings
 
 from fuel.models import RouteCache
 from fuel.services.http import get_json
+from fuel.services.planner import decimate
 
 
 class RoutingError(Exception):
@@ -36,7 +37,9 @@ def get_route(lat1, lng1, lat2, lng2):
 
     path = f"{lng1:.5f},{lat1:.5f};{lng2:.5f},{lat2:.5f}"
     url = f'{settings.OSRM_BASE_URL}/route/v1/driving/{path}'
-    params = {'overview': 'simplified', 'geometries': 'geojson', 'alternatives': 'false'}
+    # Full geometry on purpose: the planner needs a line that actually hugs
+    # the road for corridor matching, and trip.py thins it before responding.
+    params = {'overview': 'full', 'geometries': 'geojson', 'alternatives': 'false'}
 
     data = None
     for attempt in range(2):
@@ -49,15 +52,21 @@ def get_route(lat1, lng1, lat2, lng2):
             else:
                 raise RoutingError(f'Routing service unreachable: {exc}') from exc
 
-    if data.get('code') != 'Ok' or not data.get('routes'):
+    if not isinstance(data, dict) or data.get('code') != 'Ok' or not data.get('routes'):
+        code = data.get('code') if isinstance(data, dict) else 'invalid response'
         raise RoutingError(f'OSRM could not route between the given points '
-                           f'(code: {data.get("code")})')
+                           f'(code: {code})')
 
     route = data['routes'][0]
     payload = {
         'distance_miles': route['distance'] / 1609.344,
         'duration_hours': route['duration'] / 3600.0,
-        'coordinates': route['geometry']['coordinates'],
+        # Thin the full geometry once, here, so the cache holds the working
+        # polyline and repeats skip both the multi-MB read and re-decimation.
+        'coordinates': decimate(
+            route['geometry']['coordinates'],
+            settings.ROUTE_MIN_SPACING_MILES,
+        ).tolist(),
     }
     RouteCache.objects.create(key=key, payload=payload)
     return payload

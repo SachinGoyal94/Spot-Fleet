@@ -90,8 +90,10 @@ def build_trip(start_q, finish_q):
         'total_gallons_purchased': round(total_gallons, 2),
         'total_fuel_cost_usd': round(total_cost, 2),
         'fuel_stops': stops,
+        # The profile polyline is the full route decimated to a fixed spacing:
+        # small enough for clients, close enough to the road for the plan.
         'route_geojson': {
             'type': 'LineString',
-            'coordinates': route['coordinates'],
+            'coordinates': profile['pts'].tolist(),
         },
     }

@@ -48,14 +48,40 @@ class InfeasibleRoute(Exception):
         )
 
 
+def decimate(points, min_spacing_miles):
+    """Thins a polyline: keeps the endpoints and, between them, any point at
+    least ``min_spacing_miles`` from the last kept point. OSRM's full geometry
+    is far denser than anyone needs (tens of thousands of nodes); half a mile
+    of spacing keeps the line on the road and everything downstream cheap.
+    """
+    pts = np.asarray(points, dtype=float)
+    if len(pts) <= 2:
+        return pts
+    lng = np.radians(pts[:-1, 0])
+    lat = np.radians(pts[:-1, 1])
+    lng2 = np.radians(pts[1:, 0])
+    lat2 = np.radians(pts[1:, 1])
+    a = (np.sin((lat2 - lat) / 2) ** 2
+         + np.cos(lat) * np.cos(lat2) * np.sin((lng2 - lng) / 2) ** 2)
+    step = 2 * EARTH_RADIUS_MILES * np.arcsin(np.sqrt(np.clip(a, 0, 1)))
+    cum = np.concatenate([[0.0], np.cumsum(step)])
+
+    keep = [0]
+    for i in range(1, len(pts) - 1):
+        if cum[i] - cum[keep[-1]] >= min_spacing_miles:
+            keep.append(i)
+    keep.append(len(pts) - 1)
+    return pts[keep]
+
+
 def build_profile(coordinates, total_distance_miles):
-    """Precomputes cumulative distance along the polyline.
+    """Precomputes the working polyline and cumulative distance along it.
 
     Segment lengths come from a local flat-earth approximation (fine at
     routing scales), then are uniformly scaled so the polyline's total length
     matches OSRM's official route distance.
     """
-    pts = np.asarray(coordinates, dtype=float)  # (N, 2) as [lng, lat]
+    pts = decimate(coordinates, settings.ROUTE_MIN_SPACING_MILES)
     lng = np.radians(pts[:-1, 0])
     lat = np.radians(pts[:-1, 1])
     lng2 = np.radians(pts[1:, 0])
@@ -75,6 +101,10 @@ def corridor_stations(stations, profile, buffer_miles=None):
 
     ``stations`` is a list of dicts with at least 'lat' and 'lng'. The result
     is the same dicts (plus 'miles_along'), sorted by distance along route.
+
+    Two vectorized passes keep this fast on full routes: a cheap screening
+    pass against a heavily subsampled polyline drops everything nowhere near
+    the route, then only survivors get the exact segment projection.
     """
     if buffer_miles is None:
         buffer_miles = settings.CORRIDOR_BUFFER_MILES
@@ -83,54 +113,70 @@ def corridor_stations(stations, profile, buffer_miles=None):
     if len(pts) < 2 or not stations:
         return []
 
+    lat = np.radians(np.array([s['lat'] for s in stations]))[:, None]
+    lng = np.radians(np.array([s['lng'] for s in stations]))[:, None]
+
+    # Stage 1: screen against every ~50th vertex with a generous radius.
+    coarse = _segments(pts[::50])
+    screen = _pairwise_distances(lat, lng, *coarse).min(axis=1)
+    candidates = [st for st, ok in zip(stations, screen)
+                  if ok <= settings.CORRIDOR_SCREEN_MILES]
+    if not candidates:
+        return []
+
+    # Stage 2: exact projection of the survivors, chunked to bound memory.
+    exact = _segments(pts)
+    out = []
+    for i in range(0, len(candidates), 500):
+        chunk = candidates[i:i + 500]
+        clat = np.radians(np.array([s['lat'] for s in chunk]))[:, None]
+        clng = np.radians(np.array([s['lng'] for s in chunk]))[:, None]
+        dists, along = _nearest_on_route(clat, clng, exact, cum)
+        for st, d, m in zip(chunk, dists, along):
+            if d <= buffer_miles:
+                out.append({**st, 'miles_along': m})
+    out.sort(key=lambda s: s['miles_along'])
+    return out
+
+
+def _segments(pts):
+    """Start/end radians and mid-latitude cosine for every polyline segment."""
     slat = np.radians(pts[:-1, 1])
     slng = np.radians(pts[:-1, 0])
     elat = np.radians(pts[1:, 1])
     elng = np.radians(pts[1:, 0])
-
-    bbox_pad_deg = (buffer_miles + 2) / 69.0
-    lat_min, lat_max = pts[:, 1].min() - bbox_pad_deg, pts[:, 1].max() + bbox_pad_deg
-    lng_min, lng_max = pts[:, 0].min() - bbox_pad_deg, pts[:, 0].max() + bbox_pad_deg
-
-    kept = []
-    for st in stations:
-        lat, lng = st['lat'], st['lng']
-        if not (lat_min <= lat <= lat_max and lng_min <= lng <= lng_max):
-            continue
-        miles_along, dist = _project_station(
-            lat, lng, slat, slng, elat, elng, cum)
-        if dist <= buffer_miles:
-            kept.append({**st, 'miles_along': miles_along})
-    kept.sort(key=lambda s: s['miles_along'])
-    return kept
+    return slat, slng, elat, elng, np.cos((slat + elat) / 2.0)
 
 
-def _project_station(lat, lng, slat, slng, elat, elng, cum):
-    """Nearest point on the polyline -> (miles_along, distance_to_route_miles)."""
-    p_lat = np.radians(lat)
-    p_lng = np.radians(lng)
-
-    # Local flat-earth frame around the station's longitude.
-    cos_lat = np.cos((slat + elat) / 2.0)
+def _pairwise_distances(p_lat, p_lng, slat, slng, elat, elng, cos_lat):
+    """(K, M) miles from K points (radians, column vectors) to M segments."""
     ax = (slng - p_lng) * cos_lat
     ay = slat - p_lat
-    bx = (elng - p_lng) * cos_lat
-    by = elat - p_lat
-
-    abx = bx - ax
-    aby = by - ay
-    ab2 = abx * abx + aby * aby
-    t = np.where(ab2 > 0, -(ax * abx + ay * aby) / np.maximum(ab2, 1e-18), 0.0)
-    t = np.clip(t, 0.0, 1.0)
-
+    abx = (elng - slng) * cos_lat
+    aby = elat - slat
+    t = np.clip(-(ax * abx + ay * aby) / np.maximum(abx * abx + aby * aby, 1e-18),
+                0.0, 1.0)
     dx = ax + t * abx
     dy = ay + t * aby
-    rad2 = dx * dx + dy * dy
-    dist_miles = EARTH_RADIUS_MILES * np.sqrt(rad2)
+    return EARTH_RADIUS_MILES * np.sqrt(dx * dx + dy * dy)
 
-    seg_idx = int(np.argmin(dist_miles))
-    miles_along = cum[seg_idx] + t[seg_idx] * (cum[seg_idx + 1] - cum[seg_idx])
-    return float(miles_along), float(dist_miles[seg_idx])
+
+def _nearest_on_route(p_lat, p_lng, segments, cum):
+    """Per point: (miles from route start at the projection, distance in
+    miles to the route) for the closest segment."""
+    dists = _pairwise_distances(p_lat, p_lng, *segments)
+    best = dists.argmin(axis=1)
+    rows = np.arange(len(best))
+    slat, slng, elat, elng, cos_lat = segments
+    ax = (slng[best] - p_lng[rows, 0]) * cos_lat[best]
+    ay = slat[best] - p_lat[rows, 0]
+    abx = (elng[best] - slng[best]) * cos_lat[best]
+    aby = elat[best] - slat[best]
+    ab2 = abx * abx + aby * aby
+    t = np.where(ab2 > 0, np.clip(-(ax * abx + ay * aby) / np.maximum(ab2, 1e-18),
+                                  0.0, 1.0), 0.0)
+    miles = cum[best] + t * (cum[best + 1] - cum[best])
+    return dists[rows, best], miles
 
 
 def plan_fuel_stops(total_distance_miles, corridor, mpg=None, range_miles=None):

@@ -2,7 +2,7 @@
 
 from django.test import TestCase
 
-from fuel.services.planner import build_profile, corridor_stations
+from fuel.services.planner import build_profile, corridor_stations, decimate
 
 # A straight east-west "route" at latitude 41 spanning lng -90 .. -89
 # (101 points, ~52 miles raw, rescaled by build_profile below).
@@ -45,3 +45,22 @@ class CorridorTests(TestCase):
     def test_profile_scales_to_osrm_distance(self):
         profile = build_profile(ROUTE, total_distance_miles=123.0)
         self.assertAlmostEqual(profile['cum'][-1], 123.0, places=6)
+
+
+class DecimateTests(TestCase):
+    def test_thins_dense_line_and_keeps_endpoints(self):
+        # 1001 points at ~0.007 mile spacing, thinned to 0.5 miles.
+        dense = [[-90.0, 41.0 + i * 0.0001] for i in range(1001)]
+        thin = decimate(dense, min_spacing_miles=0.5)
+        self.assertLess(len(thin), 30)
+        self.assertEqual(thin[0].tolist(), dense[0])
+        self.assertEqual(thin[-1].tolist(), dense[-1])
+        # Every kept segment respects the spacing (small float slack), except
+        # the final one: the endpoint is always kept, whatever it costs.
+        for a, b in zip(thin[:-2], thin[1:-1]):
+            step = abs(b[1] - a[1]) * 69.0
+            self.assertGreaterEqual(step, 0.4999)
+
+    def test_short_lines_pass_through(self):
+        two = [[-90.0, 41.0], [-89.0, 41.0]]
+        self.assertEqual(decimate(two, 0.5).tolist(), two)

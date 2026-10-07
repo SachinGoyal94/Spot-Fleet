@@ -106,6 +106,15 @@ def _photon(params):
     yield from candidates
 
 
+def _state_from_display(display_name):
+    """Pull the state name out of a Nominatim display string. Longest match
+    first, so 'West Virginia' is never read as 'Virginia'."""
+    for name in sorted(STATE_NAMES.values(), key=len, reverse=True):
+        if name in display_name:
+            return name
+    return ''
+
+
 def _nominatim(params):
     _nominatim_limiter.wait()
     params = {'format': 'jsonv2', 'limit': 3, 'countrycodes': 'us', **params}
@@ -114,9 +123,7 @@ def _nominatim(params):
         display = row.get('display_name', '')
         yield {
             'lat': float(row['lat']), 'lng': float(row['lon']),
-            # Nominatim display names contain the full state name.
-            'state': next((name for name in STATE_NAMES.values()
-                           if name in display), ''),
+            'state': _state_from_display(display),
             'city': '',
             'name': row.get('name') or '',
             'label': display.split(',')[0] if display else '',

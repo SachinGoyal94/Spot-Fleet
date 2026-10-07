@@ -39,6 +39,9 @@ python manage.py geocode_stations
 The second command geocodes the whole list, which takes about an hour, so it
 is a one-time seeding step and normally nobody needs to run it.
 
+Settings ship with `DEBUG=True` and `ALLOWED_HOSTS=['*']` because this is a
+local demo; change both before running it anywhere public.
+
 Then open:
 
 - `http://127.0.0.1:8000/api/route?start=Cincinnati, OH&finish=Springfield, MO`
@@ -98,12 +101,18 @@ GET /api/route?start=...&finish=...
 
 ### Corridor filter
 
-Truckstops that are nowhere near the route should not be candidates. The
-route polyline from OSRM gets every station with known coordinates projected
-onto it (point to segment distance, vectorized with numpy), and only stations
-within `CORRIDOR_BUFFER_MILES` (4 miles) of the polyline survive. Each
-survivor keeps its "miles along route" value, which is what the planner
-works with. On a cross-country route this takes a few milliseconds.
+Truckstops that are nowhere near the route should not be candidates. OSRM is
+asked for the full geometry of the route on purpose: the simplified overview
+it offers by default is so coarse that a 500 mile route comes back as a few
+dozen points, and stations would be judged against straight lines tens of
+miles long. The full line is thinned to half-mile spacing on the server
+(one decimation pass, still a single OSRM call), and every station with
+known coordinates is projected onto it, vectorized with numpy: a cheap
+screening pass against every 50th vertex drops stations nowhere near the
+route, then survivors get the exact point-to-segment projection. Stations
+within `CORRIDOR_BUFFER_MILES` (4 miles) stay in play, each carrying its
+"miles along route" value, which is what the planner works with. The whole
+corridor step is a few milliseconds per request.
 
 ### Fuel plan
 
@@ -129,7 +138,7 @@ One trip needs one OSRM call and one geocoder lookup per uncached endpoint.
 Start/finish geocodes are stored in the `GeoCache` table and OSRM responses
 in `RouteCache`, so repeating or re-running a trip answers from SQLite. A
 fresh cross-country trip takes around 1 to 2 seconds end to end, repeats
-answer in 25 to 70 ms.
+answer in 30 to 60 ms.
 
 The 6,738 truckstop addresses were geocoded once during seeding (about an
 hour against the free geocoders, politely rate limited) and the result is

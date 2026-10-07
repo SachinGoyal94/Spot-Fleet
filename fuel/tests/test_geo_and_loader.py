@@ -7,10 +7,21 @@ from django.core.management import call_command
 from django.test import TestCase
 
 from fuel.models import FuelStation
-from fuel.services.geo import _state_matches, in_us_bounds, parse_latlng
+from fuel.services.geo import (_state_from_display, _state_matches,
+                               in_us_bounds, parse_latlng)
+from fuel.services.planner import build_profile, decimate
 
 
 class GeoHelperTests(TestCase):
+    def test_state_from_display_prefers_longest_match(self):
+        self.assertEqual(
+            _state_from_display('Charleston, Kanawha County, West Virginia, US'),
+            'West Virginia')
+        self.assertEqual(
+            _state_from_display('Louisville, Jefferson County, Kentucky, US'),
+            'Kentucky')
+        self.assertEqual(_state_from_display('Nowhere, Ocean'), '')
+
     def test_parse_latlng(self):
         self.assertEqual(parse_latlng('41.8781,-87.6298'), (41.8781, -87.6298))
         self.assertEqual(parse_latlng(' 39.5 ; -94.5 '), (39.5, -94.5))
